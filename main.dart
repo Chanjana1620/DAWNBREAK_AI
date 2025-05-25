@@ -34,7 +34,7 @@ class _LoginPageState extends State<LoginPage> {
   void _login() {
     if (_usernameController.text.isNotEmpty &&
         _passwordController.text.isNotEmpty) {
-      Navigator.push(
+      Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (_) => ProfileSetupPage()));
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -68,16 +68,26 @@ class _LoginPageState extends State<LoginPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Icon(Icons.directions_bus, size: 100, color: Colors.white),
+                  const SizedBox(height: 24),
                   TextField(
                     controller: _usernameController,
-                    decoration: const InputDecoration(labelText: 'Username or Phone Number'),
+                    decoration: const InputDecoration(
+                      labelText: 'Username or Phone Number',
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
                   ),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: _passwordController,
-                    decoration: const InputDecoration(labelText: 'Password'),
+                    decoration: const InputDecoration(
+                      labelText: 'Password',
+                      filled: true,
+                      fillColor: Colors.white,
+                    ),
                     obscureText: true,
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: _login,
                     child: const Text('Login'),
@@ -246,6 +256,11 @@ class _MainInterfaceState extends State<MainInterface> {
   String? _destination;
   late String _selectedQuote;
 
+  // Booking and payment history mock lists
+  List<Map<String, dynamic>> bookingHistory = [];
+  List<Map<String, dynamic>> paymentHistory = [];
+  List<Map<String, dynamic>> cart = [];
+
   @override
   void initState() {
     super.initState();
@@ -265,13 +280,22 @@ class _MainInterfaceState extends State<MainInterface> {
             name: widget.name,
             age: widget.age,
             dob: widget.dob,
-            onPaymentSuccess: () {
-              // This is called after ticket is generated, so just reset fields
+            onPaymentSuccess: (paymentDetail, bookingDetail) {
               setState(() {
+                paymentHistory.add(paymentDetail);
+                bookingHistory.add(bookingDetail);
                 _boarding = null;
                 _destination = null;
                 _selectedIndex = 4; // Search tab
               });
+            },
+            onBackToHome: () {
+              setState(() {
+                _boarding = null;
+                _destination = null;
+                _selectedIndex = 4;
+              });
+              Navigator.popUntil(context, (route) => route.isFirst);
             },
           ),
         ),
@@ -283,15 +307,104 @@ class _MainInterfaceState extends State<MainInterface> {
     }
   }
 
+  void _addToCart() {
+    if (_boarding != null &&
+        _destination != null &&
+        _boarding != _destination) {
+      setState(() {
+        cart.add({
+          'boarding': _boarding!,
+          'destination': _destination!,
+        });
+        _boarding = null;
+        _destination = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Added to cart")),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Select valid boarding and destination")),
+      );
+    }
+  }
+
   List<Widget> _screens() => [
-        const Center(child: Text('Cart Page')),
-        const Center(child: Text('Payment History')),
-        Center(
-            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Text('Booking History'),
-          const SizedBox(height: 10),
-          ElevatedButton(onPressed: () {}, child: const Text('Rebook'))
-        ])),
+        // Cart
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: cart.isEmpty
+              ? const Center(child: Text('Cart is empty'))
+              : ListView.builder(
+                  itemCount: cart.length,
+                  itemBuilder: (context, i) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.directions_bus),
+                      title: Text(
+                          '${cart[i]['boarding']} → ${cart[i]['destination']}'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () {
+                          setState(() => cart.removeAt(i));
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+        ),
+        // Payment History
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: paymentHistory.isEmpty
+              ? const Center(child: Text('No payment history'))
+              : ListView.builder(
+                  itemCount: paymentHistory.length,
+                  itemBuilder: (context, i) {
+                    final p = paymentHistory[i];
+                    return Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.payment),
+                        title: Text(
+                            '${p['boarding']} → ${p['destination']}'),
+                        subtitle: Text(
+                            '₹${p['fare']} | ${p['method']} | ${p['date']}'),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        // Booking History
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: bookingHistory.isEmpty
+              ? const Center(child: Text('No booking history'))
+              : ListView.builder(
+                  itemCount: bookingHistory.length,
+                  itemBuilder: (context, i) {
+                    final b = bookingHistory[i];
+                    return Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.history),
+                        title: Text(
+                            '${b['boarding']} → ${b['destination']} (Seat: ${b['seat']})'),
+                        subtitle: Text(
+                            '${b['date']} | ₹${b['fare']}'),
+                        trailing: ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _boarding = b['boarding'];
+                              _destination = b['destination'];
+                              _selectedIndex = 4;
+                            });
+                          },
+                          child: const Text('Rebook'),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+        // Profile Details
         ProfileDetailsPage(
           name: widget.name,
           age: widget.age,
@@ -299,6 +412,7 @@ class _MainInterfaceState extends State<MainInterface> {
           email: widget.email,
           gender: widget.gender,
         ),
+        // Search/Book
         SingleChildScrollView(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -345,11 +459,19 @@ class _MainInterfaceState extends State<MainInterface> {
                     .toList(),
               ),
               const SizedBox(height: 30),
-              Center(
-                child: ElevatedButton(
-                  onPressed: _bookTicket,
-                  child: const Text('Book Ticket'),
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton(
+                    onPressed: _bookTicket,
+                    child: const Text('Book Ticket'),
+                  ),
+                  const SizedBox(width: 20),
+                  ElevatedButton(
+                    onPressed: _addToCart,
+                    child: const Text('Add to Cart'),
+                  ),
+                ],
               )
             ],
           ),
@@ -369,18 +491,7 @@ class _MainInterfaceState extends State<MainInterface> {
         setState(() => _selectedIndex = 4);
         break;
       case 'Profile Details':
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ProfileDetailsPage(
-              name: widget.name,
-              age: widget.age,
-              dob: widget.dob,
-              email: widget.email,
-              gender: widget.gender,
-            ),
-          ),
-        );
+        setState(() => _selectedIndex = 3);
         break;
       case 'Booking History':
         setState(() => _selectedIndex = 2);
@@ -534,7 +645,8 @@ class PaymentPage extends StatefulWidget {
   final String name;
   final String age;
   final String dob;
-  final VoidCallback onPaymentSuccess;
+  final Function(Map<String, dynamic> paymentDetail, Map<String, dynamic> bookingDetail) onPaymentSuccess;
+  final VoidCallback? onBackToHome;
 
   PaymentPage({
     required this.boarding,
@@ -543,6 +655,7 @@ class PaymentPage extends StatefulWidget {
     required this.age,
     required this.dob,
     required this.onPaymentSuccess,
+    this.onBackToHome,
   });
 
   @override
@@ -556,8 +669,6 @@ class _PaymentPageState extends State<PaymentPage> {
   bool _isProcessing = false;
 
   double getFare() {
-    // Simple fare calculation based on the index difference in the destination list * 50
-    // Use a consistent list for both boarding and destination.
     final destinations = [
       'Delhi',
       'Mumbai',
@@ -597,7 +708,6 @@ class _PaymentPageState extends State<PaymentPage> {
   }
 
   String getEstimatedTime() {
-    // Dummy time estimate
     return '${2 + Random().nextInt(5)} hours';
   }
 
@@ -610,8 +720,30 @@ class _PaymentPageState extends State<PaymentPage> {
     }
 
     setState(() => _isProcessing = true);
-    await Future.delayed(const Duration(seconds: 2)); // simulate payment processing
+    await Future.delayed(const Duration(seconds: 2));
     setState(() => _isProcessing = false);
+
+    int seatNumber = Random().nextInt(50) + 1;
+    String travelTime = getEstimatedTime();
+    double fare = getFare();
+    String methodStr = _selectedMethod.toString().split('.').last;
+
+    // Payment and Booking Details for history
+    final now = DateTime.now();
+    Map<String, dynamic> paymentDetail = {
+      'boarding': widget.boarding,
+      'destination': widget.destination,
+      'fare': fare.toStringAsFixed(2),
+      'method': methodStr,
+      'date': '${now.day}/${now.month}/${now.year} ${now.hour}:${now.minute.toString().padLeft(2, '0')}'
+    };
+    Map<String, dynamic> bookingDetail = {
+      'boarding': widget.boarding,
+      'destination': widget.destination,
+      'seat': seatNumber,
+      'fare': fare.toStringAsFixed(2),
+      'date': '${now.day}/${now.month}/${now.year} ${now.hour}:${now.minute.toString().padLeft(2, '0')}'
+    };
 
     Navigator.pushReplacement(
       context,
@@ -622,18 +754,21 @@ class _PaymentPageState extends State<PaymentPage> {
           name: widget.name,
           age: widget.age,
           dob: widget.dob,
-          seatNumber: Random().nextInt(50) + 1,
-          time: getEstimatedTime(),
-          price: getFare(),
+          seatNumber: seatNumber,
+          time: travelTime,
+          price: fare,
+          onTicketClose: () {
+            widget.onPaymentSuccess(paymentDetail, bookingDetail);
+            // Use the callback to go back to home if provided, else pop to root.
+            if (widget.onBackToHome != null) {
+              widget.onBackToHome!();
+            } else {
+              Navigator.popUntil(context, (route) => route.isFirst);
+            }
+          },
         ),
       ),
     );
-
-    // onPaymentSuccess should only be called after the ticket has been generated (i.e. after TicketPage is popped back).
-    // So, do not call here. Let MainInterface reset fields on return.
-    // However, if you want to reset immediately, you may use:
-    // WidgetsBinding.instance.addPostFrameCallback((_) => widget.onPaymentSuccess());
-    // But usually it is better to do so on return to main interface.
   }
 
   @override
@@ -697,6 +832,7 @@ class TicketPage extends StatelessWidget {
   final int seatNumber;
   final String time;
   final double price;
+  final VoidCallback onTicketClose;
 
   TicketPage({
     required this.boarding,
@@ -707,6 +843,7 @@ class TicketPage extends StatelessWidget {
     required this.seatNumber,
     required this.time,
     required this.price,
+    required this.onTicketClose,
   });
 
   Future<void> _generatePdf(BuildContext context) async {
@@ -716,26 +853,38 @@ class TicketPage extends StatelessWidget {
           pageFormat: PdfPageFormat.a4,
           build: (pw.Context context) {
             return pw.Center(
-              child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text('JUZZ TRIP - Travel Ticket',
-                        style: pw.TextStyle(
-                            fontSize: 24, fontWeight: pw.FontWeight.bold)),
-                    pw.SizedBox(height: 20),
-                    pw.Text('Name: $name'),
-                    pw.Text('Age: $age'),
-                    pw.Text('Date of Birth: $dob'),
-                    pw.Text('Boarding Point: $boarding'),
-                    pw.Text('Destination: $destination'),
-                    pw.Text('Seat Number: $seatNumber'),
-                    pw.Text('Time of Travel: $time'),
-                    pw.Text('Ticket Price: ₹${price.toStringAsFixed(2)}'),
-                    pw.SizedBox(height: 20),
-                    pw.Text(
-                        'Thank you for choosing JUZZ TRIP! Have a safe journey.',
-                        style: const pw.TextStyle(fontStyle: pw.FontStyle.italic)),
-                  ]),
+              child: pw.Container(
+                width: 400,
+                padding: const pw.EdgeInsets.all(24),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.red, width: 2),
+                  borderRadius: pw.BorderRadius.circular(16),
+                ),
+                child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Center(
+                        child: pw.Text('JUZZ TRIP - Travel Ticket',
+                            style: pw.TextStyle(
+                                fontSize: 24, fontWeight: pw.FontWeight.bold, color: PdfColors.red)),
+                      ),
+                      pw.SizedBox(height: 20),
+                      pw.Text('Name: $name'),
+                      pw.Text('Age: $age'),
+                      pw.Text('Date of Birth: $dob'),
+                      pw.Text('Boarding Point: $boarding'),
+                      pw.Text('Destination: $destination'),
+                      pw.Text('Seat Number: $seatNumber'),
+                      pw.Text('Time of Travel: $time'),
+                      pw.Text('Ticket Price: ₹${price.toStringAsFixed(2)}'),
+                      pw.SizedBox(height: 20),
+                      pw.Center(
+                        child: pw.Text(
+                            'Thank you for choosing JUZZ TRIP! Have a safe journey.',
+                            style: pw.TextStyle(fontStyle: pw.FontStyle.italic, color: PdfColors.red)),
+                      ),
+                    ]),
+              ),
             );
           }),
     );
@@ -744,60 +893,75 @@ class TicketPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Your Ticket'),
-        actions: [
-          IconButton(
-              onPressed: () => _generatePdf(context),
-              icon: const Icon(Icons.picture_as_pdf))
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: ListView(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: Text(name),
-              subtitle: const Text('Name'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.cake),
-              title: Text(age),
-              subtitle: const Text('Age'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.calendar_today),
-              title: Text(dob),
-              subtitle: const Text('Date of Birth'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.location_city),
-              title: Text(boarding),
-              subtitle: const Text('Boarding Point'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.location_on),
-              title: Text(destination),
-              subtitle: const Text('Destination'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.event_seat),
-              title: Text('$seatNumber'),
-              subtitle: const Text('Seat Number'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.access_time),
-              title: Text(time),
-              subtitle: const Text('Time of Travel'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.attach_money),
-              title: Text('₹${price.toStringAsFixed(2)}'),
-              subtitle: const Text('Ticket Price'),
-            ),
+    return WillPopScope(
+      onWillPop: () async {
+        onTicketClose();
+        return false;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Your Ticket'),
+          actions: [
+            IconButton(
+                onPressed: () => _generatePdf(context),
+                icon: const Icon(Icons.picture_as_pdf))
           ],
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: ListView(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.person),
+                title: Text(name),
+                subtitle: const Text('Name'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.cake),
+                title: Text(age),
+                subtitle: const Text('Age'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.calendar_today),
+                title: Text(dob),
+                subtitle: const Text('Date of Birth'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.location_city),
+                title: Text(boarding),
+                subtitle: const Text('Boarding Point'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.location_on),
+                title: Text(destination),
+                subtitle: const Text('Destination'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.event_seat),
+                title: Text('$seatNumber'),
+                subtitle: const Text('Seat Number'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.access_time),
+                title: Text(time),
+                subtitle: const Text('Time of Travel'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.attach_money),
+                title: Text('₹${price.toStringAsFixed(2)}'),
+                subtitle: const Text('Ticket Price'),
+              ),
+              const SizedBox(height: 24),
+              Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    onTicketClose();
+                  },
+                  child: const Text('Back to Home'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
